@@ -89,6 +89,12 @@ export const createSoundEffects = () => {
         { frequency: 554, durationMs: 110, gain: 0.1, wave: "triangle" },
         { frequency: 659, durationMs: 130, gain: 0.11, wave: "triangle" },
         { frequency: 880, durationMs: 200, gain: 0.12, wave: "triangle" }
+      ]),
+    timerTick: () => play([{ frequency: 820, durationMs: 45, gain: 0.06, wave: "triangle" }]),
+    timerEnd: () =>
+      play([
+        { frequency: 320, durationMs: 90, gain: 0.1, wave: "square" },
+        { frequency: 240, durationMs: 120, gain: 0.1, wave: "square" }
       ])
   };
 };

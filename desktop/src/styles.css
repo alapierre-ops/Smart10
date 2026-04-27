@@ -466,6 +466,27 @@ button:hover {
   border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
 }
 
+.podium-list .podium-item {
+  border-radius: 10px;
+  margin-bottom: 0.35rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.podium-list .podium-gold {
+  background: color-mix(in oklab, var(--accent-amber) 26%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent-amber) 58%, transparent);
+}
+
+.podium-list .podium-silver {
+  background: color-mix(in oklab, #d4d8e7 22%, transparent);
+  border: 1px solid color-mix(in oklab, #d4d8e7 48%, transparent);
+}
+
+.podium-list .podium-bronze {
+  background: color-mix(in oklab, #c68b5d 24%, transparent);
+  border: 1px solid color-mix(in oklab, #c68b5d 54%, transparent);
+}
+
 .decision-box {
   margin-top: 0.8rem;
   padding: 0.8rem;

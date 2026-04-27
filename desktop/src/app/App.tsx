@@ -37,7 +37,8 @@ const StepHeader = ({ currentStep, setCurrentStep }: { currentStep: number; setC
 );
 
 const PlayersSection = () => {
-  const { setupPlayers, setPlayerName, addPlayer, removePlayer, targetPointsToWin, setTargetPointsToWin } = useAppStore();
+  const { setupPlayers, setPlayerName, addPlayer, removePlayer, targetPointsToWin, setTargetPointsToWin, timerSeconds, setTimerSeconds } =
+    useAppStore();
   const sounds = useMemo(() => createSoundEffects(), []);
 
   return (
@@ -98,6 +99,22 @@ const PlayersSection = () => {
         }}
         placeholder="Nombre de points (ex: 30)"
       />
+      <h3>Durée du timer (ambiance)</h3>
+      <div className="points-selector">
+        {[15, 30, 45].map((value) => (
+          <button
+            key={`timer_${value}`}
+            type="button"
+            className={timerSeconds === value ? "points-button is-active" : "points-button"}
+            onClick={() => {
+              sounds.click();
+              setTimerSeconds(value);
+            }}
+          >
+            {value}s
+          </button>
+        ))}
+      </div>
     </div>
   );
 };
@@ -111,8 +128,8 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
   const [propositions, setPropositions] = useState(EMPTY_PROPOSITIONS("true_false"));
   const [importText, setImportText] = useState("");
   const [message, setMessage] = useState("");
-  const [exportText, setExportText] = useState("");
   const [ioMode, setIoMode] = useState<"none" | "export" | "import">("none");
+  const [importFlow, setImportFlow] = useState<"none" | "json_ready" | "from_photo">("none");
   const [selectedExportCardIds, setSelectedExportCardIds] = useState<string[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -145,6 +162,17 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
     setSelectedExportCardIds((previous) =>
       previous.includes(cardId) ? previous.filter((id) => id !== cardId) : [...previous, cardId]
     );
+  };
+
+  const copyToClipboard = async (text: string, successMessage: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage(successMessage);
+      sounds.correct();
+    } catch (_error) {
+      setMessage("Impossible de copier automatiquement. Copie manuellement le texte affiché.");
+      sounds.wrong();
+    }
   };
 
   const updateBinaryChoice = (index: 0 | 1, value: string) => {
@@ -412,7 +440,6 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
             onClick={() => {
               setIoMode("export");
               setSelectedExportCardIds(cards.map((card) => card.id));
-              setExportText("");
               setMessage("Mode export activé.");
               sounds.navigate();
             }}
@@ -423,6 +450,7 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
             type="button"
             onClick={() => {
               setIoMode("import");
+              setImportFlow("none");
               setMessage("Mode import activé.");
               sounds.navigate();
             }}
@@ -455,14 +483,13 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
             <button
               type="button"
               className="primary-button"
-              onClick={() => {
+              onClick={async () => {
                 const exportable = cards.filter((card) => selectedExportCardIds.includes(card.id));
-                setExportText(exportCards(exportable));
-                setMessage(`${exportable.length} carte(s) exportée(s) en JSON.`);
-                sounds.correct();
+                const payload = exportCards(exportable);
+                await copyToClipboard(payload, `${exportable.length} carte(s) copiée(s) en JSON.`);
               }}
             >
-              Générer le JSON export
+              Copier
             </button>
             <button
               type="button"
@@ -474,68 +501,181 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
               Retour
             </button>
           </div>
-          <textarea rows={10} value={exportText} readOnly placeholder="Le JSON exporté apparaît ici." />
         </div>
       ) : null}
       {ioMode === "import" ? (
         <div className="panel">
           <h4>Page Import JSON</h4>
-          <p className="counter-text">
-            Colle un tableau JSON de cartes puis importe. Les cartes importées sont AJOUTÉES, jamais remplacées.
-          </p>
-          <textarea
-            rows={10}
-            placeholder="Colle ici un tableau JSON de cartes à importer."
-            value={importText}
-            onChange={(event) => setImportText(event.target.value)}
-          />
-          <div className="inline-actions">
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => {
-                const ok = importCards(importText);
-                setMessage(ok ? "Import réussi: cartes ajoutées à la base existante." : "JSON invalide.");
-                if (ok) {
-                  sounds.correct();
-                } else {
-                  sounds.wrong();
-                }
-              }}
-            >
-              Importer (ajout)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIoMode("none");
-                sounds.navigate();
-              }}
-            >
-              Retour
-            </button>
-          </div>
-          <h4>Tuto photo carte IRL → JSON</h4>
-          <p className="counter-text">
-            1) Prends une photo nette de ta carte. 2) Envoie-la à une IA (ChatGPT, Claude...) avec la consigne: "Convertis
-            cette carte au format JSON Smart10". 3) Demande strictement un tableau JSON importable.
-          </p>
-          <textarea
-            rows={10}
-            readOnly
-            value={`[
+          {importFlow === "none" ? (
+            <>
+              <p className="counter-text">Choisis comment tu veux importer des cartes.</p>
+              <div className="inline-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setImportFlow("json_ready");
+                    setMessage("Mode import direct JSON.");
+                    sounds.navigate();
+                  }}
+                >
+                  J'ai déjà un JSON prêt à importer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportFlow("from_photo");
+                    setMessage("Mode conversion photo -> JSON.");
+                    sounds.navigate();
+                  }}
+                >
+                  J'ai une photo de carte et je veux générer le JSON
+                </button>
+              </div>
+            </>
+          ) : null}
+          {importFlow === "json_ready" ? (
+            <>
+              <p className="counter-text">
+                Colle un tableau JSON de cartes puis importe. Les cartes importées sont AJOUTÉES, jamais remplacées.
+              </p>
+              <textarea
+                rows={10}
+                placeholder="Colle ici un tableau JSON de cartes à importer."
+                value={importText}
+                onChange={(event) => setImportText(event.target.value)}
+              />
+              <div className="inline-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    const ok = importCards(importText);
+                    setMessage(ok ? "Import réussi: cartes ajoutées à la base existante." : "JSON invalide.");
+                    if (ok) {
+                      sounds.correct();
+                    } else {
+                      sounds.wrong();
+                    }
+                  }}
+                >
+                  Importer (ajout)
+                </button>
+              </div>
+            </>
+          ) : null}
+          {importFlow === "from_photo" ? (
+            <>
+              <p className="counter-text">
+                Prends une photo nette de la carte IRL, envoie-la à une IA, puis colle le JSON renvoyé ici pour l'import.
+              </p>
+              <textarea
+                rows={12}
+                readOnly
+                value={`Tu es un assistant qui transforme une carte Smart10 en JSON strictement importable.
+Analyse la photo et retourne uniquement un JSON valide (sans markdown) au format suivant:
+[
   {
     "id": "card_custom_1",
     "title": "Titre de la carte",
     "type": "true_false | ranking | binary_choice | free_text",
     "binaryChoices": ["choix 1", "choix 2"],
     "propositions": [
-      { "id": "p_1", "text": "Proposition 1", "correctAnswer": "..." }
-      // ... jusqu'à 10 propositions
+      { "id": "p_1", "text": "Proposition 1", "correctAnswer": "..." },
+      { "id": "p_2", "text": "Proposition 2", "correctAnswer": "..." }
+      // continuer jusqu'à 10 propositions
     ]
   }
-]`}
-          />
+]
+
+Règles:
+- Toujours 10 propositions.
+- type=true_false => correctAnswer = "true" ou "false"
+- type=ranking => correctAnswer = "1" à "10"
+- type=binary_choice => fournir binaryChoices (2 valeurs) et chaque correctAnswer doit être une de ces 2 valeurs
+- type=free_text => correctAnswer texte libre.
+`}
+              />
+              <div className="inline-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={async () => {
+                    const prompt = `Tu es un assistant qui transforme une carte Smart10 en JSON strictement importable.
+Analyse la photo et retourne uniquement un JSON valide (sans markdown) au format suivant:
+[
+  {
+    "id": "card_custom_1",
+    "title": "Titre de la carte",
+    "type": "true_false | ranking | binary_choice | free_text",
+    "binaryChoices": ["choix 1", "choix 2"],
+    "propositions": [
+      { "id": "p_1", "text": "Proposition 1", "correctAnswer": "..." },
+      { "id": "p_2", "text": "Proposition 2", "correctAnswer": "..." }
+    ]
+  }
+]
+
+Règles:
+- Toujours 10 propositions.
+- type=true_false => correctAnswer = "true" ou "false"
+- type=ranking => correctAnswer = "1" à "10"
+- type=binary_choice => fournir binaryChoices (2 valeurs) et chaque correctAnswer doit être une de ces 2 valeurs
+- type=free_text => correctAnswer texte libre.`;
+                    await copyToClipboard(prompt, "Prompt IA copié.");
+                  }}
+                >
+                  Copier le prompt IA
+                </button>
+              </div>
+              <textarea
+                rows={10}
+                placeholder="Colle ici le JSON retourné par l'IA."
+                value={importText}
+                onChange={(event) => setImportText(event.target.value)}
+              />
+              <div className="inline-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    const ok = importCards(importText);
+                    setMessage(ok ? "Import réussi: cartes ajoutées à la base existante." : "JSON invalide.");
+                    if (ok) {
+                      sounds.correct();
+                    } else {
+                      sounds.wrong();
+                    }
+                  }}
+                >
+                  Importer le JSON IA (ajout)
+                </button>
+              </div>
+            </>
+          ) : null}
+          <div className="inline-actions">
+            {importFlow !== "none" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setImportFlow("none");
+                  sounds.navigate();
+                }}
+              >
+                Retour au choix
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setIoMode("none");
+                setImportFlow("none");
+                sounds.navigate();
+              }}
+            >
+              Retour
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -762,6 +902,7 @@ const MatchOrderSection = () => {
 export const App = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [textAnswer, setTextAnswer] = useState("");
+  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
   const {
     matchState,
     selectProposition,
@@ -818,6 +959,35 @@ export const App = () => {
     previousDecisionPlayerRef.current = currentDecisionPlayerId;
   }, [matchState?.decisionPendingPlayerId, sounds]);
 
+  useEffect(() => {
+    if (matchState?.phase !== "in_round") {
+      setTimerRemaining(null);
+      return;
+    }
+    setTimerRemaining(matchState.timerSeconds);
+  }, [matchState?.phase, matchState?.currentCardIndex, matchState?.currentPlayerId, matchState?.timerSeconds]);
+
+  useEffect(() => {
+    if (matchState?.phase !== "in_round" || timerRemaining === null || timerRemaining <= 0) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      setTimerRemaining((previous) => {
+        if (previous === null) {
+          return null;
+        }
+        const next = previous - 1;
+        if (next <= 0) {
+          sounds.timerEnd();
+          return 0;
+        }
+        sounds.timerTick();
+        return next;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [matchState?.phase, timerRemaining, sounds]);
+
   if (matchState?.phase === "in_round") {
     const card = matchState.orderedCards[matchState.currentCardIndex];
     const cardBinaryChoices = card.binaryChoices ?? DEFAULT_BINARY_CHOICES;
@@ -840,6 +1010,7 @@ export const App = () => {
           </header>
 
           <div className="panel game-question-panel">
+            <div className="timer-pill">Timer: {timerRemaining ?? matchState.timerSeconds}s</div>
             <div className="tiny-label">Joueur actif</div>
             <h2>{currentPlayer.name}</h2>
             <p className="question-title">{card.title}</p>
@@ -1135,6 +1306,7 @@ export const App = () => {
 
   if (matchState?.phase === "finished") {
     const winners = matchState.players.filter((player) => matchState.winnerIds.includes(player.id));
+    const rankedPlayers = matchState.players.slice().sort((first, second) => second.totalScore - first.totalScore);
     return (
       <main>
         <section className="editor-card game-shell">
@@ -1145,16 +1317,26 @@ export const App = () => {
             </p>
           </header>
           <div className="panel">
-            <ul className="score-list">
-              {matchState.players
-                .slice()
-                .sort((first, second) => second.totalScore - first.totalScore)
-                .map((player) => (
-                  <li key={player.id}>
-                    <span>{player.name}</span>
-                    <strong>{player.totalScore}</strong>
-                  </li>
-                ))}
+            <ul className="score-list podium-list">
+              {rankedPlayers.map((player, index) => (
+                <li
+                  key={player.id}
+                  className={
+                    index === 0
+                      ? "podium-item podium-gold"
+                      : index === 1
+                        ? "podium-item podium-silver"
+                        : index === 2
+                          ? "podium-item podium-bronze"
+                          : "podium-item"
+                  }
+                >
+                  <span>
+                    {index + 1}. {player.name}
+                  </span>
+                  <strong>{player.totalScore}</strong>
+                </li>
+              ))}
             </ul>
             <div className="bottom-right-actions">
               <button type="button" className="danger-button" onClick={confirmEndMatch}>
