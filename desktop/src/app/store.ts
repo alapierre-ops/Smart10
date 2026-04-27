@@ -4,6 +4,7 @@ import { createCard, exportCards, importCardsFromJson, loadCards, saveCards } fr
 
 type MatchPlayerStatus = "active" | "stopped" | "eliminated";
 type MatchPhase = "in_round" | "round_summary" | "finished";
+const PATHS_STORAGE_KEY = "smart10.paths";
 
 interface MatchPlayer {
   id: string;
@@ -32,8 +33,16 @@ interface MatchState {
   winnerIds: string[];
 }
 
+export interface SavedPath {
+  id: string;
+  name: string;
+  category: string;
+  cardIds: string[];
+}
+
 interface AppState {
   cards: QuestionCard[];
+  savedPaths: SavedPath[];
   matchState: MatchState | null;
   setupPlayers: string[];
   targetPointsToWin: number;
@@ -45,6 +54,10 @@ interface AppState {
   addCardToMatchSelection: (cardId: string) => void;
   removeCardFromMatchSelection: (cardId: string) => void;
   moveSelectedCardInMatch: (cardId: string, direction: "up" | "down") => void;
+  setCardSelectionForMatch: (cardIds: string[]) => void;
+  createPathFromSelection: (name: string, category: string) => string | null;
+  updatePathFromSelection: (pathId: string, name: string, category: string) => string | null;
+  deletePath: (pathId: string) => void;
   startMatch: () => string | null;
   selectProposition: (propositionId: string) => void;
   answerSelectedProposition: (answer: string) => void;
@@ -68,6 +81,64 @@ interface AppState {
 }
 
 const cards = loadCards();
+const createDefaultPaths = (availableCards: QuestionCard[]): SavedPath[] => {
+  const ids = availableCards.map((card) => card.id);
+  const pick = (start: number, count: number): string[] => ids.slice(start, start + count);
+  const defaults: SavedPath[] = [
+    {
+      id: "path_default_geo",
+      name: "Tour du monde",
+      category: "Géographie",
+      cardIds: pick(0, 5)
+    },
+    {
+      id: "path_default_culture",
+      name: "Culture pop",
+      category: "Culture générale",
+      cardIds: pick(3, 5)
+    },
+    {
+      id: "path_default_mix",
+      name: "Mix rapide",
+      category: "Mix",
+      cardIds: pick(6, 5)
+    }
+  ];
+  return defaults.filter((path) => path.cardIds.length > 0);
+};
+const loadPaths = (availableCards: QuestionCard[]): SavedPath[] => {
+  const defaults = createDefaultPaths(availableCards);
+  const raw = localStorage.getItem(PATHS_STORAGE_KEY);
+  if (!raw) {
+    savePaths(defaults);
+    return defaults;
+  }
+  try {
+    const parsed = JSON.parse(raw) as SavedPath[];
+    if (!Array.isArray(parsed)) {
+      savePaths(defaults);
+      return defaults;
+    }
+    const valid = parsed.filter(
+      (path) =>
+        Boolean(path?.id?.trim()) &&
+        Boolean(path?.name?.trim()) &&
+        Boolean(path?.category?.trim()) &&
+        Array.isArray(path.cardIds)
+    );
+    if (valid.length === 0) {
+      savePaths(defaults);
+      return defaults;
+    }
+    return valid;
+  } catch (_error) {
+    savePaths(defaults);
+    return defaults;
+  }
+};
+const savePaths = (paths: SavedPath[]): void => {
+  localStorage.setItem(PATHS_STORAGE_KEY, JSON.stringify(paths));
+};
 const normalizeText = (value: string): string =>
   value
     .normalize("NFD")
@@ -137,6 +208,7 @@ const resolveRoundIfEnded = (state: MatchState): MatchState => {
 
 export const useAppStore = create<AppState>((set, get) => ({
   cards,
+  savedPaths: loadPaths(cards),
   matchState: null,
   setupPlayers: ["Player 1"],
   targetPointsToWin: 30,
@@ -190,6 +262,71 @@ export const useAppStore = create<AppState>((set, get) => ({
       const [moved] = updated.splice(currentIndex, 1);
       updated.splice(targetIndex, 0, moved);
       return { selectedCardIdsForMatch: updated };
+    }),
+  setCardSelectionForMatch: (cardIds) =>
+    set((state) => ({
+      selectedCardIdsForMatch: cardIds.filter((cardId) => state.cards.some((card) => card.id === cardId))
+    })),
+  createPathFromSelection: (name, category) => {
+    const trimmedName = name.trim();
+    const trimmedCategory = category.trim();
+    const state = get();
+    if (!trimmedName) {
+      return "Le nom du parcours est obligatoire.";
+    }
+    if (!trimmedCategory) {
+      return "La catégorie du parcours est obligatoire.";
+    }
+    if (state.selectedCardIdsForMatch.length === 0) {
+      return "Ajoute au moins une carte dans le parcours avant de sauvegarder.";
+    }
+    const created: SavedPath = {
+      id: `path_${crypto.randomUUID()}`,
+      name: trimmedName,
+      category: trimmedCategory,
+      cardIds: [...state.selectedCardIdsForMatch]
+    };
+    const updated = [...state.savedPaths, created];
+    savePaths(updated);
+    set({ savedPaths: updated });
+    return null;
+  },
+  updatePathFromSelection: (pathId, name, category) => {
+    const trimmedName = name.trim();
+    const trimmedCategory = category.trim();
+    const state = get();
+    if (!trimmedName) {
+      return "Le nom du parcours est obligatoire.";
+    }
+    if (!trimmedCategory) {
+      return "La catégorie du parcours est obligatoire.";
+    }
+    if (state.selectedCardIdsForMatch.length === 0) {
+      return "Ajoute au moins une carte dans le parcours avant de sauvegarder.";
+    }
+    const exists = state.savedPaths.some((path) => path.id === pathId);
+    if (!exists) {
+      return "Parcours introuvable.";
+    }
+    const updated = state.savedPaths.map((path) =>
+      path.id === pathId
+        ? {
+            ...path,
+            name: trimmedName,
+            category: trimmedCategory,
+            cardIds: [...state.selectedCardIdsForMatch]
+          }
+        : path
+    );
+    savePaths(updated);
+    set({ savedPaths: updated });
+    return null;
+  },
+  deletePath: (pathId) =>
+    set((state) => {
+      const updated = state.savedPaths.filter((path) => path.id !== pathId);
+      savePaths(updated);
+      return { savedPaths: updated };
     }),
   startMatch: () => {
     const state = get();
@@ -515,9 +652,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteCard: (cardId) =>
     set((state) => {
       const updatedCards = state.cards.filter((card) => card.id !== cardId);
+      const updatedPaths = state.savedPaths.map((path) => ({
+        ...path,
+        cardIds: path.cardIds.filter((id) => id !== cardId)
+      }));
       saveCards(updatedCards);
+      savePaths(updatedPaths);
       return {
         cards: updatedCards,
+        savedPaths: updatedPaths,
         selectedCardIdsForMatch: state.selectedCardIdsForMatch.filter((id) => id !== cardId)
       };
     }),
@@ -528,7 +671,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       return false;
     }
     saveCards(imported);
-    set({ cards: imported, selectedCardIdsForMatch: [] });
+    const importedIds = new Set(imported.map((card) => card.id));
+    const cleanedPaths = get().savedPaths.map((path) => ({
+      ...path,
+      cardIds: path.cardIds.filter((cardId) => importedIds.has(cardId))
+    }));
+    savePaths(cleanedPaths);
+    set({ cards: imported, savedPaths: cleanedPaths, selectedCardIdsForMatch: [] });
     return true;
   }
 }));

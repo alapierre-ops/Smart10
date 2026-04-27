@@ -383,26 +383,169 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
 };
 
 const MatchOrderSection = () => {
-  const { cards, selectedCardIdsForMatch, addCardToMatchSelection, removeCardFromMatchSelection, moveSelectedCardInMatch, startMatch } =
-    useAppStore();
+  const {
+    cards,
+    savedPaths,
+    selectedCardIdsForMatch,
+    addCardToMatchSelection,
+    removeCardFromMatchSelection,
+    moveSelectedCardInMatch,
+    setCardSelectionForMatch,
+    createPathFromSelection,
+    updatePathFromSelection,
+    deletePath,
+    startMatch
+  } = useAppStore();
   const [matchMessage, setMatchMessage] = useState("");
+  const [pathName, setPathName] = useState("");
+  const [pathCategory, setPathCategory] = useState("");
+  const [selectedPathId, setSelectedPathId] = useState<string>("");
+  const [isEditingPath, setIsEditingPath] = useState(false);
   const sounds = useMemo(() => createSoundEffects(), []);
   const selectedCards = selectedCardIdsForMatch
     .map((selectedId) => cards.find((card) => card.id === selectedId))
     .filter((card): card is (typeof cards)[number] => Boolean(card));
   const availableCards = cards.filter((card) => !selectedCardIdsForMatch.includes(card.id));
 
+  const loadPath = (pathId: string) => {
+    const path = savedPaths.find((item) => item.id === pathId);
+    if (!path) {
+      return;
+    }
+    setSelectedPathId(path.id);
+    setPathName(path.name);
+    setPathCategory(path.category);
+    setCardSelectionForMatch(path.cardIds);
+    setIsEditingPath(false);
+  };
+
   return (
     <div className="panel">
       <h2>Parcours</h2>
-      <div className="launch-grid">
+      <p className="counter-text">Choisis un parcours existant en cliquant sur une carte.</p>
+      <ul className="question-list">
+        {savedPaths.map((path) => (
+          <li
+            key={path.id}
+            className={selectedPathId === path.id ? "card-item is-active" : "card-item"}
+            onClick={() => {
+              sounds.click();
+              loadPath(path.id);
+              setMatchMessage(`Parcours sélectionné: ${path.name}.`);
+            }}
+          >
+            <div className="card-item-content">
+              <strong>{path.name}</strong>
+              <span>
+                {path.category} · {path.cardIds.length} carte(s)
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {selectedPathId ? (
+        <div className="inline-actions">
+          <button
+            type="button"
+            onClick={() => {
+              setIsEditingPath((previous) => !previous);
+              sounds.navigate();
+            }}
+          >
+            {isEditingPath ? "Fermer la modification" : "Modifier le parcours"}
+          </button>
+        </div>
+      ) : null}
+
+      {isEditingPath ? (
+        <div className="players-list">
+          <input
+            value={pathName}
+            placeholder="Nom du parcours"
+            onChange={(event) => setPathName(event.target.value)}
+          />
+          <input
+            value={pathCategory}
+            placeholder="Catégorie générale"
+            onChange={(event) => setPathCategory(event.target.value)}
+          />
+          <div className="inline-actions">
+            {!selectedPathId ? (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  const error = createPathFromSelection(pathName, pathCategory);
+                  setMatchMessage(error ?? "Parcours créé.");
+                  if (error) {
+                    sounds.wrong();
+                    return;
+                  }
+                  sounds.correct();
+                }}
+              >
+                Créer le parcours
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => {
+                if (!selectedPathId) {
+                  setMatchMessage("Sélectionne un parcours à mettre à jour.");
+                  sounds.wrong();
+                  return;
+                }
+                const error = updatePathFromSelection(selectedPathId, pathName, pathCategory);
+                setMatchMessage(error ?? "Parcours mis à jour.");
+                if (error) {
+                  sounds.wrong();
+                  return;
+                }
+                sounds.correct();
+              }}
+            >
+              Enregistrer les modifications
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              onClick={() => {
+                if (!selectedPathId) {
+                  setMatchMessage("Sélectionne un parcours à supprimer.");
+                  sounds.wrong();
+                  return;
+                }
+                deletePath(selectedPathId);
+                setSelectedPathId("");
+                setPathName("");
+                setPathCategory("");
+                setCardSelectionForMatch([]);
+                setIsEditingPath(false);
+                setMatchMessage("Parcours supprimé.");
+                sounds.wrong();
+              }}
+            >
+              Supprimer le parcours
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {isEditingPath ? <div className="launch-grid">
         <div>
           <h4>Cartes disponibles</h4>
           <ul className="compact-list">
             {availableCards.map((card) => (
               <li key={`available_${card.id}`}>
                 <span>{card.title}</span>
-                <button type="button" onClick={() => addCardToMatchSelection(card.id)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    addCardToMatchSelection(card.id);
+                    sounds.click();
+                  }}
+                >
                   Ajouter
                 </button>
               </li>
@@ -432,21 +575,21 @@ const MatchOrderSection = () => {
             ))}
           </ul>
         </div>
-      </div>
+      </div> : null}
       <button
         type="button"
         className="primary-button"
         onClick={() => {
-          const error = startMatch();
-          setMatchMessage(error ? error : "Partie lancée avec le parcours actuel.");
-          if (error) {
-            sounds.wrong();
-          } else {
-            sounds.navigate();
-          }
+          setSelectedPathId("");
+          setPathName("");
+          setPathCategory("");
+          setCardSelectionForMatch([]);
+          setIsEditingPath(true);
+          setMatchMessage("Nouveau parcours: compose ta sélection puis enregistre.");
+          sounds.navigate();
         }}
       >
-        Lancer la partie
+        Nouveau parcours
       </button>
       {matchMessage ? <p className="status-message">{matchMessage}</p> : null}
     </div>
@@ -466,6 +609,7 @@ export const App = () => {
     validateFreeTextAsCorrect,
     validateFreeTextAsWrong,
     continueAfterRound,
+    startMatch,
     terminateMatch
   } =
     useAppStore();
@@ -886,13 +1030,21 @@ export const App = () => {
           <button
             type="button"
             className="primary-button"
-            disabled={currentStep === STEPS.length - 1}
             onClick={() => {
+              if (currentStep === STEPS.length - 1) {
+                const error = startMatch();
+                if (error) {
+                  sounds.wrong();
+                  return;
+                }
+                sounds.navigate();
+                return;
+              }
               sounds.navigate();
               setCurrentStep((prev) => prev + 1);
             }}
           >
-            Étape suivante
+            {currentStep === STEPS.length - 1 ? "Lancer la partie" : "Étape suivante"}
           </button>
         </div>
       </section>
