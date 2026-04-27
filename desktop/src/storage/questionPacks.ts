@@ -4,10 +4,19 @@ import { QuestionCard, QuestionProposition, QuestionType, TfQuestion } from "../
 const STORAGE_KEY = "smart10.cards";
 const REQUIRED_PROPOSITION_COUNT = 10;
 const QUESTION_TYPES: QuestionType[] = ["true_false", "ranking", "binary_choice", "free_text"];
+const DEFAULT_BINARY_CHOICES: [string, string] = ["homme", "femme"];
 
 const normalizeCard = (card: QuestionCard): QuestionCard => ({
   ...card,
-  type: QUESTION_TYPES.includes(card.type) ? card.type : "true_false"
+  type: QUESTION_TYPES.includes(card.type) ? card.type : "true_false",
+  binaryChoices:
+    card.type === "binary_choice"
+      ? (Array.isArray(card.binaryChoices) &&
+          card.binaryChoices.length === 2 &&
+          card.binaryChoices.every((choice) => Boolean(String(choice).trim()))
+          ? [String(card.binaryChoices[0]).trim(), String(card.binaryChoices[1]).trim()]
+          : DEFAULT_BINARY_CHOICES)
+      : undefined
 });
 
 const validateProposition = (proposition: QuestionProposition): boolean => {
@@ -24,6 +33,15 @@ const validateCard = (card: QuestionCard): boolean => {
   }
   if (!QUESTION_TYPES.includes(card.type)) {
     return false;
+  }
+  if (card.type === "binary_choice") {
+    if (
+      !Array.isArray(card.binaryChoices) ||
+      card.binaryChoices.length !== 2 ||
+      card.binaryChoices.some((choice) => !String(choice).trim())
+    ) {
+      return false;
+    }
   }
   if (!Array.isArray(card.propositions) || card.propositions.length !== REQUIRED_PROPOSITION_COUNT) {
     return false;
@@ -71,11 +89,16 @@ export const loadCards = (): QuestionCard[] => {
           correctAnswer: question.correctAnswer
         }))
       };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([migrated]));
       return [migrated];
     }
-    return createDefaultCards();
+    const defaults = createDefaultCards();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+    return defaults;
   } catch (_error) {
-    return createDefaultCards();
+    const defaults = createDefaultCards();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+    return defaults;
   }
 };
 
@@ -88,10 +111,16 @@ export interface CardDraftProposition {
   correctAnswer: string;
 }
 
-export const createCard = (title: string, type: QuestionType, propositions: CardDraftProposition[]): QuestionCard => ({
+export const createCard = (
+  title: string,
+  type: QuestionType,
+  propositions: CardDraftProposition[],
+  binaryChoices?: [string, string]
+): QuestionCard => ({
   id: `card_${crypto.randomUUID()}`,
   title: title.trim(),
   type,
+  binaryChoices: type === "binary_choice" ? (binaryChoices ?? DEFAULT_BINARY_CHOICES) : undefined,
   propositions: propositions.map((proposition) => ({
     id: `prop_${crypto.randomUUID()}`,
     text: proposition.text.trim(),

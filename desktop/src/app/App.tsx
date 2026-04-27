@@ -9,10 +9,11 @@ const DEFAULT_ANSWER_BY_TYPE: Record<QuestionType, string> = {
   binary_choice: "homme",
   free_text: ""
 };
+const DEFAULT_BINARY_CHOICES: [string, string] = ["homme", "femme"];
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   true_false: "Vrai / Faux",
   ranking: "Classement (1 à 10)",
-  binary_choice: "Question fermée (Homme/Femme)",
+  binary_choice: "Question fermée (2 choix personnalisés)",
   free_text: "Réponse libre"
 };
 const EMPTY_PROPOSITIONS = (type: QuestionType) =>
@@ -106,10 +107,13 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
   const sounds = useMemo(() => createSoundEffects(), []);
   const [title, setTitle] = useState("");
   const [questionType, setQuestionType] = useState<QuestionType>("true_false");
+  const [binaryChoices, setBinaryChoices] = useState<[string, string]>(DEFAULT_BINARY_CHOICES);
   const [propositions, setPropositions] = useState(EMPTY_PROPOSITIONS("true_false"));
   const [importText, setImportText] = useState("");
   const [message, setMessage] = useState("");
   const [exportText, setExportText] = useState("");
+  const [ioMode, setIoMode] = useState<"none" | "export" | "import">("none");
+  const [selectedExportCardIds, setSelectedExportCardIds] = useState<string[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -137,8 +141,40 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
     );
   };
 
+  const toggleExportCard = (cardId: string) => {
+    setSelectedExportCardIds((previous) =>
+      previous.includes(cardId) ? previous.filter((id) => id !== cardId) : [...previous, cardId]
+    );
+  };
+
+  const updateBinaryChoice = (index: 0 | 1, value: string) => {
+    setBinaryChoices((previous) => {
+      const updated: [string, string] = [...previous] as [string, string];
+      updated[index] = value;
+      return updated;
+    });
+    if (questionType !== "binary_choice") {
+      return;
+    }
+    setPropositions((previous) =>
+      previous.map((proposition) => {
+        const answer = proposition.correctAnswer.trim();
+        if (answer !== binaryChoices[0] && answer !== binaryChoices[1]) {
+          return { ...proposition, correctAnswer: index === 0 ? value : binaryChoices[0] };
+        }
+        if (index === 0 && answer === binaryChoices[0]) {
+          return { ...proposition, correctAnswer: value };
+        }
+        if (index === 1 && answer === binaryChoices[1]) {
+          return { ...proposition, correctAnswer: value };
+        }
+        return proposition;
+      })
+    );
+  };
+
   const handleCreate = () => {
-    const error = addCard(title, questionType, propositions);
+    const error = addCard(title, questionType, propositions, binaryChoices);
     if (error) {
       setModalError(error);
       sounds.wrong();
@@ -149,6 +185,7 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
     setMessage("Carte créée avec succès.");
     setTitle("");
     setQuestionType("true_false");
+    setBinaryChoices(DEFAULT_BINARY_CHOICES);
     setPropositions(EMPTY_PROPOSITIONS("true_false"));
     sounds.correct();
   };
@@ -159,6 +196,7 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
     setSelectedCardId(cardId);
     setTitle(card.title);
     setQuestionType(card.type);
+    setBinaryChoices(card.binaryChoices ?? DEFAULT_BINARY_CHOICES);
     setPropositions(
       card.propositions.map((item) => ({
         text: item.text,
@@ -174,7 +212,7 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
     if (!selectedCardId) {
       return;
     }
-    const error = updateCard(selectedCardId, title, questionType, propositions);
+    const error = updateCard(selectedCardId, title, questionType, propositions, binaryChoices);
     if (error) {
       setModalError(error);
       sounds.wrong();
@@ -210,10 +248,18 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
             onChange={(event) => {
               const nextType = event.target.value as QuestionType;
               setQuestionType(nextType);
+              if (nextType === "binary_choice") {
+                setBinaryChoices((previous) =>
+                  previous[0].trim() && previous[1].trim() ? previous : DEFAULT_BINARY_CHOICES
+                );
+              }
               setPropositions((previous) =>
                 previous.map((proposition) => ({
                   ...proposition,
-                  correctAnswer: DEFAULT_ANSWER_BY_TYPE[nextType]
+                  correctAnswer:
+                    nextType === "binary_choice"
+                      ? (binaryChoices[0].trim() || DEFAULT_BINARY_CHOICES[0])
+                      : DEFAULT_ANSWER_BY_TYPE[nextType]
                 }))
               );
             }}
@@ -225,6 +271,20 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
             ))}
           </select>
           <label>10 propositions</label>
+          {questionType === "binary_choice" ? (
+            <div className="inline-actions">
+              <input
+                value={binaryChoices[0]}
+                placeholder="Choix A"
+                onChange={(event) => updateBinaryChoice(0, event.target.value)}
+              />
+              <input
+                value={binaryChoices[1]}
+                placeholder="Choix B"
+                onChange={(event) => updateBinaryChoice(1, event.target.value)}
+              />
+            </div>
+          ) : null}
           <div className="propositions-grid">
             {propositions.map((proposition, index) => (
               <div key={`prop_${index}`} className="proposition-row">
@@ -253,8 +313,8 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
                   ) : null}
                   {questionType === "binary_choice" ? (
                     <>
-                      <option value="homme">Homme</option>
-                      <option value="femme">Femme</option>
+                      <option value={binaryChoices[0]}>{binaryChoices[0] || "Choix A"}</option>
+                      <option value={binaryChoices[1]}>{binaryChoices[1] || "Choix B"}</option>
                     </>
                   ) : null}
                   {questionType === "free_text" ? (
@@ -295,6 +355,7 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
           onClick={() => {
             setTitle("");
             setQuestionType("true_false");
+            setBinaryChoices(DEFAULT_BINARY_CHOICES);
             setPropositions(EMPTY_PROPOSITIONS("true_false"));
             setModalError("");
             setIsCreateModalOpen(true);
@@ -343,38 +404,140 @@ const QuestionEditor = ({ currentStep }: { currentStep: number }) => {
 
       <hr className="section-separator" />
       <h3>Importer / Exporter</h3>
-      <button
-        type="button"
-        onClick={() => {
-          const output = exportCards();
-          setExportText(output);
-          setMessage("Cartes exportées en JSON.");
-          sounds.navigate();
-        }}
-      >
-        Exporter toutes les cartes
-      </button>
-      <textarea rows={8} value={exportText} readOnly placeholder="Le JSON exporté apparaîtra ici." />
-      <textarea
-        rows={8}
-        placeholder="Collez ici un tableau JSON de cartes à importer."
-        value={importText}
-        onChange={(event) => setImportText(event.target.value)}
-      />
-      <button
-        type="button"
-        onClick={() => {
-          const ok = importCards(importText);
-          setMessage(ok ? "Cartes importées avec succès." : "JSON invalide.");
-          if (ok) {
-            sounds.navigate();
-          } else {
-            sounds.wrong();
-          }
-        }}
-      >
-        Importer le JSON
-      </button>
+      {ioMode === "none" ? (
+        <div className="inline-actions">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => {
+              setIoMode("export");
+              setSelectedExportCardIds(cards.map((card) => card.id));
+              setExportText("");
+              setMessage("Mode export activé.");
+              sounds.navigate();
+            }}
+          >
+            Mode Export
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIoMode("import");
+              setMessage("Mode import activé.");
+              sounds.navigate();
+            }}
+          >
+            Mode Import
+          </button>
+        </div>
+      ) : null}
+      {ioMode === "export" ? (
+        <div className="panel">
+          <h4>Page Export JSON</h4>
+          <p className="counter-text">
+            Coche les cartes à exporter, puis copie le JSON généré pour le partager/importer ailleurs.
+          </p>
+          <ul className="question-list">
+            {cards.map((card) => (
+              <li
+                key={`export_${card.id}`}
+                className={selectedExportCardIds.includes(card.id) ? "card-item is-active" : "card-item"}
+                onClick={() => toggleExportCard(card.id)}
+              >
+                <div className="card-item-content">
+                  <strong>{card.title}</strong>
+                  <span>{QUESTION_TYPE_LABELS[card.type]}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="inline-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => {
+                const exportable = cards.filter((card) => selectedExportCardIds.includes(card.id));
+                setExportText(exportCards(exportable));
+                setMessage(`${exportable.length} carte(s) exportée(s) en JSON.`);
+                sounds.correct();
+              }}
+            >
+              Générer le JSON export
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIoMode("none");
+                sounds.navigate();
+              }}
+            >
+              Retour
+            </button>
+          </div>
+          <textarea rows={10} value={exportText} readOnly placeholder="Le JSON exporté apparaît ici." />
+        </div>
+      ) : null}
+      {ioMode === "import" ? (
+        <div className="panel">
+          <h4>Page Import JSON</h4>
+          <p className="counter-text">
+            Colle un tableau JSON de cartes puis importe. Les cartes importées sont AJOUTÉES, jamais remplacées.
+          </p>
+          <textarea
+            rows={10}
+            placeholder="Colle ici un tableau JSON de cartes à importer."
+            value={importText}
+            onChange={(event) => setImportText(event.target.value)}
+          />
+          <div className="inline-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => {
+                const ok = importCards(importText);
+                setMessage(ok ? "Import réussi: cartes ajoutées à la base existante." : "JSON invalide.");
+                if (ok) {
+                  sounds.correct();
+                } else {
+                  sounds.wrong();
+                }
+              }}
+            >
+              Importer (ajout)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIoMode("none");
+                sounds.navigate();
+              }}
+            >
+              Retour
+            </button>
+          </div>
+          <h4>Tuto photo carte IRL → JSON</h4>
+          <p className="counter-text">
+            1) Prends une photo nette de ta carte. 2) Envoie-la à une IA (ChatGPT, Claude...) avec la consigne: "Convertis
+            cette carte au format JSON Smart10". 3) Demande strictement un tableau JSON importable.
+          </p>
+          <textarea
+            rows={10}
+            readOnly
+            value={`[
+  {
+    "id": "card_custom_1",
+    "title": "Titre de la carte",
+    "type": "true_false | ranking | binary_choice | free_text",
+    "binaryChoices": ["choix 1", "choix 2"],
+    "propositions": [
+      { "id": "p_1", "text": "Proposition 1", "correctAnswer": "..." }
+      // ... jusqu'à 10 propositions
+    ]
+  }
+]`}
+          />
+        </div>
+      ) : null}
 
       {renderModal("create")}
       {renderModal("edit")}
@@ -657,6 +820,7 @@ export const App = () => {
 
   if (matchState?.phase === "in_round") {
     const card = matchState.orderedCards[matchState.currentCardIndex];
+    const cardBinaryChoices = card.binaryChoices ?? DEFAULT_BINARY_CHOICES;
     const currentPlayer = matchState.players.find((player) => player.id === matchState.currentPlayerId);
     const selectedProposition = card.propositions.find((prop) => prop.id === matchState.selectedPropositionId) ?? null;
     const decisionPlayer = matchState.players.find((player) => player.id === matchState.decisionPendingPlayerId) ?? null;
@@ -760,17 +924,17 @@ export const App = () => {
                   <button
                     type="button"
                     className="primary-button"
-                    onClick={() => selectedProposition && answerSelectedProposition("homme")}
+                    onClick={() => selectedProposition && answerSelectedProposition(cardBinaryChoices[0])}
                     disabled={!selectedProposition || Boolean(decisionPlayer) || Boolean(wrongFeedback)}
                   >
-                    Homme
+                    {cardBinaryChoices[0]}
                   </button>
                   <button
                     type="button"
-                    onClick={() => selectedProposition && answerSelectedProposition("femme")}
+                    onClick={() => selectedProposition && answerSelectedProposition(cardBinaryChoices[1])}
                     disabled={!selectedProposition || Boolean(decisionPlayer) || Boolean(wrongFeedback)}
                   >
-                    Femme
+                    {cardBinaryChoices[1]}
                   </button>
                 </>
               ) : null}

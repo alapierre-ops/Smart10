@@ -24,6 +24,7 @@ export interface QuestionCard {
   id: string;
   title: string;
   type: QuestionType;
+  binaryChoices?: [string, string];
   propositions: QuestionProposition[];
 }
 

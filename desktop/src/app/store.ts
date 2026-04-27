@@ -68,19 +68,33 @@ interface AppState {
   acknowledgeWrongAnswerFeedback: () => void;
   continueAfterRound: () => void;
   terminateMatch: () => void;
-  addCard: (title: string, type: QuestionType, propositions: { text: string; correctAnswer: string }[]) => string | null;
+  addCard: (
+    title: string,
+    type: QuestionType,
+    propositions: { text: string; correctAnswer: string }[],
+    binaryChoices?: [string, string]
+  ) => string | null;
   updateCard: (
     cardId: string,
     title: string,
     type: QuestionType,
-    propositions: { text: string; correctAnswer: string }[]
+    propositions: { text: string; correctAnswer: string }[],
+    binaryChoices?: [string, string]
   ) => string | null;
   deleteCard: (cardId: string) => void;
-  exportCards: () => string;
+  exportCards: (subset?: QuestionCard[]) => string;
   importCards: (raw: string) => boolean;
 }
 
 const cards = loadCards();
+const cloneImportedCardWithNewIds = (card: QuestionCard): QuestionCard => ({
+  ...card,
+  id: `card_${crypto.randomUUID()}`,
+  propositions: card.propositions.map((proposition) => ({
+    ...proposition,
+    id: `prop_${crypto.randomUUID()}`
+  }))
+});
 const createDefaultPaths = (availableCards: QuestionCard[]): SavedPath[] => {
   const ids = availableCards.map((card) => card.id);
   const pick = (start: number, count: number): string[] => ids.slice(start, start + count);
@@ -126,11 +140,20 @@ const loadPaths = (availableCards: QuestionCard[]): SavedPath[] => {
         Boolean(path?.category?.trim()) &&
         Array.isArray(path.cardIds)
     );
-    if (valid.length === 0) {
+    const merged = [...valid];
+    defaults.forEach((defaultPath) => {
+      if (!merged.some((path) => path.id === defaultPath.id)) {
+        merged.push(defaultPath);
+      }
+    });
+    if (merged.length === 0) {
       savePaths(defaults);
       return defaults;
     }
-    return valid;
+    if (merged.length !== valid.length) {
+      savePaths(merged);
+    }
+    return merged;
   } catch (_error) {
     savePaths(defaults);
     return defaults;
@@ -594,7 +617,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
   terminateMatch: () => set({ matchState: null }),
-  addCard: (title, type, propositions) => {
+  addCard: (title, type, propositions, binaryChoices) => {
+    if (type === "binary_choice") {
+      if (!binaryChoices || binaryChoices.length !== 2 || binaryChoices.some((choice) => !choice.trim())) {
+        return "Les deux choix fermés sont obligatoires.";
+      }
+      const validAnswers = new Set(binaryChoices.map((choice) => choice.trim()));
+      if (propositions.some((proposition) => !validAnswers.has(proposition.correctAnswer.trim()))) {
+        return "Chaque réponse doit être l'un des deux choix définis.";
+      }
+    }
     if (!title.trim()) {
       return "Le titre de la carte est obligatoire.";
     }
@@ -609,14 +641,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (state.cards.some((card) => card.title.trim().toLowerCase() === normalizedTitle)) {
       throw new Error("Cette carte existe déjà.");
     }
-    const updatedCards = [...state.cards, createCard(title, type, propositions)];
+    const updatedCards = [
+      ...state.cards,
+      createCard(
+        title,
+        type,
+        propositions,
+        type === "binary_choice" && binaryChoices
+          ? [binaryChoices[0].trim(), binaryChoices[1].trim()]
+          : undefined
+      )
+    ];
     saveCards(updatedCards);
     set({
       cards: updatedCards
     });
     return null;
   },
-  updateCard: (cardId, title, type, propositions) => {
+  updateCard: (cardId, title, type, propositions, binaryChoices) => {
+    if (type === "binary_choice") {
+      if (!binaryChoices || binaryChoices.length !== 2 || binaryChoices.some((choice) => !choice.trim())) {
+        return "Les deux choix fermés sont obligatoires.";
+      }
+      const validAnswers = new Set(binaryChoices.map((choice) => choice.trim()));
+      if (propositions.some((proposition) => !validAnswers.has(proposition.correctAnswer.trim()))) {
+        return "Chaque réponse doit être l'un des deux choix définis.";
+      }
+    }
     if (!title.trim()) {
       return "Le titre de la carte est obligatoire.";
     }
@@ -637,6 +688,10 @@ export const useAppStore = create<AppState>((set, get) => ({
             ...card,
             title: title.trim(),
             type,
+            binaryChoices:
+              type === "binary_choice" && binaryChoices
+                ? ([binaryChoices[0].trim(), binaryChoices[1].trim()] as [string, string])
+                : undefined,
             propositions: card.propositions.map((item, index) => ({
               ...item,
               text: propositions[index].text.trim(),
@@ -664,20 +719,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedCardIdsForMatch: state.selectedCardIdsForMatch.filter((id) => id !== cardId)
       };
     }),
-  exportCards: () => exportCards(get().cards),
+  exportCards: (subset) => exportCards(subset ?? get().cards),
   importCards: (raw) => {
     const imported = importCardsFromJson(raw);
     if (!imported) {
       return false;
     }
-    saveCards(imported);
-    const importedIds = new Set(imported.map((card) => card.id));
-    const cleanedPaths = get().savedPaths.map((path) => ({
-      ...path,
-      cardIds: path.cardIds.filter((cardId) => importedIds.has(cardId))
-    }));
-    savePaths(cleanedPaths);
-    set({ cards: imported, savedPaths: cleanedPaths, selectedCardIdsForMatch: [] });
+    const state = get();
+    const importedAsAdditions = imported.map(cloneImportedCardWithNewIds);
+    const updatedCards = [...state.cards, ...importedAsAdditions];
+    saveCards(updatedCards);
+    set({ cards: updatedCards });
     return true;
   }
 }));
