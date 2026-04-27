@@ -99,6 +99,19 @@ Fonctions clés :
 - fallback sur un pack par défaut (`sample-pack.json`) ;
 - migration legacy depuis un ancien format de questions plates.
 
+### 3.5 Choix des cartes et parcours de partie
+
+Le parcours de partie est un ordre de cartes conservé dans l'état applicatif :
+
+- `selectedCardIdsForMatch` stocke la sélection ordonnée ;
+- ajout/retrait/réordonnancement via les actions du store ;
+- construction du parcours effectif au `startMatch()`.
+
+Important :
+
+- l'export JSON porte sur les cartes (catalogue), pas sur le parcours de partie ;
+- l'import de cartes réinitialise la sélection de parcours en cours.
+
 ## 4. Modèle de données
 
 Source : `desktop/src/game-engine/types.ts`

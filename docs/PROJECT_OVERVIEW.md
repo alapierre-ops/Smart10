@@ -49,22 +49,30 @@ Le projet sert de support d'apprentissage pour les pratiques Agile :
 
 ### Gestion des parcours
 
-- Créer un nouveau parcours.
-- Modifier un parcours existant.
-- Supprimer un parcours.
-- Sauvegarder les données localement.
+- Composer un parcours de partie en sélectionnant les cartes.
+- Réordonner les cartes du parcours avant lancement.
+- Retirer des cartes du parcours.
+- Sauvegarder localement le catalogue de cartes.
 
 ### Conception des cartes
 
-- Trois types de questions :
+- Quatre types de questions :
   - Vrai / Faux
   - Classement
   - Choix multiple
+  - Réponse libre
 - Contrainte métier : 10 propositions obligatoires par carte.
 - Paramétrage par carte :
   - titre ;
-  - instruction ;
-  - nombre de points par bonne réponse.
+  - type de question ;
+  - réponse attendue pour chaque proposition.
+
+### Import / export et parcours
+
+- Export de toutes les cartes en JSON depuis l'étape Cartes.
+- Import d'un JSON valide pour remplacer le catalogue de cartes.
+- Construction du parcours depuis l'étape Parcours : ajout, retrait et réordonnancement des cartes.
+- Le parcours est une sélection de session (il n'est pas importé/exporté comme objet séparé).
 
 ### Déroulement d'une partie
 

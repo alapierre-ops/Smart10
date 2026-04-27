@@ -8,10 +8,16 @@
 5. Verify winner summary and replay/back to setup flow.
 
 ## Question authoring smoke test
-1. Add a new True/False question.
-2. Verify duplicate prompt is rejected.
-3. Delete a question and verify it disappears.
-4. Export pack JSON and re-import it.
+1. Create a new card with 10 propositions.
+2. Verify duplicate card title is rejected.
+3. Delete a card and verify it disappears.
+4. Export cards JSON and re-import it.
+
+## Parcours and import/export smoke test
+1. Compose a parcours by selecting multiple cards.
+2. Reorder cards in the parcours and verify order is applied in game.
+3. Import another valid cards JSON.
+4. Verify card catalog is replaced and parcours selection is reset.
 
 ## Installation smoke test
 1. Build installer with `npm run dist`.

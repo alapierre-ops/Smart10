@@ -1,32 +1,52 @@
-# Smart10 Local Rules Spec (v1)
+# Smart 10 - Règles fonctionnelles
 
-## Match Setup
-- 2 to 10 players on one shared screen.
-- One selected True/False question pack.
-- Match length defaults to up to 10 rounds, limited by available questions.
+## 1. Préparation de partie
 
-## Round Flow
-1. A question is shown to all players.
-2. The active player answers True or False.
-3. If correct, active player gains 1 point and the round ends.
-4. If incorrect, next player attempts the same question.
-5. If all players miss, round ends with no points.
+- 1 à 10 joueurs peuvent être configurés.
+- Un objectif de points est défini avant le lancement.
+- Le parcours est construit en sélectionnant des cartes dans l'étape Parcours.
+- L'ordre des cartes est modifiable avant démarrage.
 
-## Turn Order
-- Turn order is sequential by player list.
-- First player in the setup list starts each round for v1.
+## 2. Modèle de carte
 
-## Scoring
-- Correct answer: +1 point.
-- Incorrect answer: +0 points.
+- Une carte contient exactement 10 propositions.
+- Types de carte pris en charge :
+	- Vrai / Faux
+	- Classement
+	- Choix multiple binaire (Homme/Femme)
+	- Réponse libre
 
-## Endgame
-- Game ends after the configured number of rounds.
-- Highest score wins.
-- Ties are allowed and shown as co-winners.
+## 3. Déroulement d'un tour
 
-## Shared-Screen UX Requirements
-- Always show active player.
-- Always show scoreboard.
-- Show round transitions clearly.
-- Keep answer controls simple: two buttons (`True`, `False`).
+1. Le joueur actif sélectionne une proposition non révélée.
+2. Le joueur répond selon le type de la carte.
+3. Si la réponse est correcte :
+	 - +1 point temporaire ;
+	 - choix entre capitaliser ou continuer.
+4. Si la réponse est incorrecte :
+	 - points temporaires remis à 0 ;
+	 - joueur éliminé pour la carte ;
+	 - passage au joueur actif suivant.
+
+## 4. Règles de score
+
+- Bonne réponse : +1 point temporaire.
+- Capitalisation : transfert des points temporaires vers le score total.
+- Mauvaise réponse : perte des points temporaires du tour en cours.
+
+## 5. Fin de carte et fin de partie
+
+- Fin de carte :
+	- toutes les propositions ont été révélées, ou
+	- il n'y a plus de joueur actif.
+- Fin de partie :
+	- un joueur atteint l'objectif de points, ou
+	- la dernière carte du parcours est terminée.
+- En cas d'égalité, plusieurs gagnants sont possibles.
+
+## 6. Import / export et parcours
+
+- Export : toutes les cartes sont exportées au format JSON.
+- Import : un JSON valide remplace le catalogue de cartes courant.
+- Le parcours est choisi au lancement en sélectionnant les cartes à jouer.
+- Le parcours n'est pas persisté comme entité séparée dans le JSON d'export.
