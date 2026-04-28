@@ -5,7 +5,6 @@ import { createCard, exportCards, importCardsFromJson, loadCards, saveCards } fr
 type MatchPlayerStatus = "active" | "stopped" | "eliminated";
 type MatchPhase = "in_round" | "round_summary" | "finished";
 const PATHS_STORAGE_KEY = "smart10.paths";
-const ALLOWED_TIMER_SECONDS = [15, 30, 45] as const;
 
 interface MatchPlayer {
   id: string;
@@ -18,7 +17,6 @@ interface MatchPlayer {
 interface MatchState {
   phase: MatchPhase;
   targetPointsToWin: number;
-  timerSeconds: number;
   orderedCards: QuestionCard[];
   currentCardIndex: number;
   currentPlayerId: string;
@@ -48,13 +46,11 @@ interface AppState {
   matchState: MatchState | null;
   setupPlayers: string[];
   targetPointsToWin: number;
-  timerSeconds: number;
   selectedCardIdsForMatch: string[];
   setPlayerName: (index: number, name: string) => void;
   addPlayer: () => void;
   removePlayer: (index: number) => void;
   setTargetPointsToWin: (points: number) => void;
-  setTimerSeconds: (seconds: number) => void;
   addCardToMatchSelection: (cardId: string) => void;
   removeCardFromMatchSelection: (cardId: string) => void;
   moveSelectedCardInMatch: (cardId: string, direction: "up" | "down") => void;
@@ -237,9 +233,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   cards,
   savedPaths: loadPaths(cards),
   matchState: null,
-  setupPlayers: ["Player 1"],
+  setupPlayers: ["Joueur 1"],
   targetPointsToWin: 30,
-  timerSeconds: 30,
   selectedCardIdsForMatch: [],
   setPlayerName: (index, name) =>
     set((state) => {
@@ -251,7 +246,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) =>
       state.setupPlayers.length >= 10
         ? state
-        : { setupPlayers: [...state.setupPlayers, `Player ${state.setupPlayers.length + 1}`] }
+        : { setupPlayers: [...state.setupPlayers, `Joueur ${state.setupPlayers.length + 1}`] }
     ),
   removePlayer: (index) =>
     set((state) => {
@@ -264,10 +259,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTargetPointsToWin: (points) =>
     set(() => ({
       targetPointsToWin: Math.max(1, Math.min(999, points))
-    })),
-  setTimerSeconds: (seconds) =>
-    set(() => ({
-      timerSeconds: ALLOWED_TIMER_SECONDS.includes(seconds as (typeof ALLOWED_TIMER_SECONDS)[number]) ? seconds : 30
     })),
   addCardToMatchSelection: (cardId) =>
     set((state) => {
@@ -382,7 +373,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       matchState: {
         phase: "in_round",
         targetPointsToWin: state.targetPointsToWin,
-        timerSeconds: state.timerSeconds,
         orderedCards,
         currentCardIndex: 0,
         currentPlayerId: players[0].id,
@@ -649,7 +639,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     const normalizedTitle = title.trim().toLowerCase();
     if (state.cards.some((card) => card.title.trim().toLowerCase() === normalizedTitle)) {
-      throw new Error("Cette carte existe déjà.");
+      return "Une carte avec ce titre existe déjà.";
     }
     const updatedCards = [
       ...state.cards,
